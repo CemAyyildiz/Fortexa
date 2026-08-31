@@ -20,6 +20,7 @@ import {
   stellarSubmitSignedRequestSchema,
   validateIdempotencyKey,
 } from "@/lib/validation/schemas";
+import { logValidationFailure, toPublicValidationDetails } from "@/lib/validation/errors";
 import { normalizeHorizonError } from "@/lib/utils/horizonErrors";
 
 type HorizonErrorContext = {
@@ -169,14 +170,14 @@ export async function POST(request: NextRequest) {
     const parsedPayload = stellarSubmitSignedRequestSchema.safeParse(bodyResult.data);
 
     if (!parsedPayload.success) {
-      logWarn("Submit signed validation failed", { ...context, userId });
+      logValidationFailure("Submit signed validation failed", { ...context, userId }, parsedPayload.error, bodyResult.data);
       return jsonWithRequestContext(request, {
         route: "/api/stellar/submit-signed",
         startedAtMs,
         status: 400,
         body: {
           error: "Invalid signed transaction submission.",
-          details: parsedPayload.error.flatten(),
+          details: toPublicValidationDetails(parsedPayload.error),
         },
         headers: rateLimitHeaders(rate),
       });
