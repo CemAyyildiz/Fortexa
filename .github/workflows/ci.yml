@@ -65,6 +65,8 @@ jobs:
 
       - name: Build
         run: npm run build
+      - name: Verify the production build left the worktree clean
+        run: git diff --exit-code
 
       - name: Check documentation links
         run: npm run check:docs
