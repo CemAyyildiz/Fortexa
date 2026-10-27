@@ -237,8 +237,8 @@ Usage: `tsx scripts/verify-audit-export.ts <file>`
 ## 8) 🛠️ Local Setup
 
 ### Requirements
-- Node.js 20+
-- npm 10+
+- Node.js 22.x
+- npm 10.x
 
 ### Start
 
@@ -277,6 +277,22 @@ To clean up local developer state safely, you can use the local demo reset utili
 ---
 
 ## 9) 🌍 Environment Variables
+
+**Server secrets vs. client-exposed values.** Next.js inlines every
+`NEXT_PUBLIC_*` variable into the browser bundle at build time — anyone who
+loads the app can read it. Everything else here stays server-only and is
+never sent to the client.
+
+| Scope | Variables | Notes |
+| --- | --- | --- |
+| **Client-exposed** (`NEXT_PUBLIC_*`) | `NEXT_PUBLIC_STELLAR_DESTINATION` | Public by design (a Stellar address). Safe to expose. |
+| **Server secrets** | `FORTEXA_AUTH_SECRET`, `DATABASE_URL`, `REDIS_URL`, `GROQ_API_KEY`, `FORTEXA_OPERATOR_WALLETS`, `FORTEXA_SIGNER_WALLETS`, `FORTEXA_VIEWER_WALLETS`, `FORTEXA_SHARED_STATE_PATH` | **Never** rename or copy these under a `NEXT_PUBLIC_` prefix. Doing so ships the secret in client-side JavaScript. |
+
+⚠️ **Do not expose auth, database, Redis, or Groq credentials to the
+client.** If a future variable needs to reach browser code, give it its own
+narrowly-scoped `NEXT_PUBLIC_*` name — never widen an existing server
+secret's scope.
+
 
 Reference (`.env.example`):
 
@@ -318,7 +334,8 @@ NEXT_PUBLIC_STELLAR_DESTINATION=
 
 # Optional external blocklist URL for dynamic threat-intel
 # Accepts JSON array of domains or plain-text (one domain per line, # comments ignored)
-# Cached in-memory for 5 minutes; feed failures fall back silently
+# Responses are limited to 1 MiB; cached in-memory for 5 minutes;
+# feed failures fall back silently
 FORTEXA_BLOCKLIST_URL=
 ```
 
@@ -334,6 +351,7 @@ npm run lint
 npm test
 npm run test:watch
 npm run check:production-readiness
+npm run check:env-duplicates
 npm run demo:scenarios
 npm run db:migrate
 ```
@@ -344,6 +362,10 @@ CI installs from the committed `package-lock.json` (`npm ci`), runs the
 production build (`npm run build`), then runs `git diff --exit-code` so a
 build that regenerates or reformats a tracked file fails loudly instead of
 silently drifting from what is committed.
+
+### CI diagnostic artifacts
+
+`.github/workflows/ci.yml` does not upload logs or reports. Diagnostic artifact retention is 7 days. If a job later uploads them with `actions/upload-artifact`, set `retention-days: 7`. Seven days leaves a failed run inspectable through the following release week, then GitHub deletes the files. `scripts/ci-artifact-retention.test.ts` fails when any upload step omits that value or sets a different one.
 
 ### Running the policy pack regression suite
 
@@ -360,6 +382,14 @@ Run the standalone demo runner (prints expected vs actual for every seeded scena
 ```bash
 npm run demo:scenarios
 ```
+
+### Env example duplicate check
+
+`npm run check:env-duplicates` reads `.env.example`, skips blank lines and full-line comments, and exits non-zero when a variable name is assigned more than once. The report lists each duplicate key with its line numbers. CI runs the same command.
+
+### CI Telemetry Opt-out
+
+The CI workflow (`.github/workflows/ci.yml`) explicitly disables Next.js anonymous telemetry at workflow scope using `NEXT_TELEMETRY_DISABLED: "1"` to ensure isolated and deterministic builds without external telemetry network calls.
 
 ### Production Readiness Check
 
@@ -524,6 +554,7 @@ or `signedXdr` strings.
 - `/scenarios` → Scenario gallery
 - `/activity` → Audit trail timeline
 - `/ops` → Operations/telemetry dashboard
+- `404` → Branded not-found page (`src/app/not-found.tsx`) with safe navigation (`/` and `/console`) without path reflection
 
 ---
 
@@ -645,9 +676,36 @@ Common Stellar Horizon failures during the signed payment flow:
 
 ---
 
-## 19) 📄 License
+## 19) 🔍 TypeScript Type Checking
 
-MIT (see `package.json`).
+Fortexa enforces static type checking in CI as a dedicated blocking step via the TypeScript compiler:
 
-All done
-...
+```bash
+npm run typecheck
+```
+
+This command runs `tsc --noEmit` against the project configuration (`tsconfig.json`) without writing output files, ensuring compile-time safety across routes, libraries, and tests.
+
+---
+
+## 20) 📄 License
+
+MIT — see the canonical text in [`LICENSE`](LICENSE).
+
+The same license is declared in `package.json` (`"license": "MIT"`). No additional
+license configuration is required; `scripts/license.test.ts` is a focused check that
+keeps `LICENSE`, the `package.json` metadata, and this README link in sync (run it
+with `npm test`).
+
+---
+
+## 20) ⌨️ Keyboard Focus & Accessibility
+
+Fortexa ensures that all interactive components share a consistent, high-contrast `:focus-visible` treatment for keyboard navigation (WCAG 2.1 Success Criterion 2.4.7):
+
+- **Links & Triggers**: `a`, `[role="link"]`, `button`, and `[role="button"]` receive a high-contrast 2px cyan ring (`hsl(var(--ring))`) with a 2px offset.
+- **Form Controls**: `input`, `select`, and `textarea` highlight unambiguously on keyboard focus.
+- **Tabs & Navigation**: `[role="tab"]`, `nav a`, and `nav button` share the same visible focus treatment across desktop glass sidebars and compact mobile navigation bars.
+- **Button Component**: [`src/components/ui/button.tsx`](src/components/ui/button.tsx) aligns with this standard via `focus-visible:ring-2` and `focus-visible:ring-offset-2`.
+
+Verified via `scripts/focus-visible-audit.test.ts` (`npx vitest run scripts/focus-visible-audit.test.ts`).
